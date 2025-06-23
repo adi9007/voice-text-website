@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,6 +46,7 @@ const Index = () => {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const finalTranscriptRef = useRef('');
   const { toast } = useToast();
 
   // Check if speech recognition is supported
@@ -56,6 +56,9 @@ const Index = () => {
 
   // Initialize speech recognition
   useEffect(() => {
+    console.log('Initializing speech recognition...');
+    console.log('Speech recognition supported:', isSpeechRecognitionSupported());
+    
     if (isSpeechRecognitionSupported()) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
@@ -66,11 +69,14 @@ const Index = () => {
         recognitionRef.current.lang = 'en-US';
 
         recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
-          let finalTranscript = '';
+          console.log('Speech recognition result received');
           let interimTranscript = '';
+          let finalTranscript = '';
 
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript;
+            console.log('Transcript:', transcript, 'isFinal:', event.results[i].isFinal);
+            
             if (event.results[i].isFinal) {
               finalTranscript += transcript + ' ';
             } else {
@@ -78,21 +84,16 @@ const Index = () => {
             }
           }
 
-          setTranscription(prev => {
-            const lines = prev.split('\n');
-            const lastLine = lines[lines.length - 1];
-            const otherLines = lines.slice(0, -1);
-            
-            if (finalTranscript) {
-              return [...otherLines, lastLine + finalTranscript].join('\n');
-            } else {
-              return [...otherLines, lastLine + interimTranscript].join('\n');
-            }
-          });
+          if (finalTranscript) {
+            finalTranscriptRef.current += finalTranscript;
+            setTranscription(finalTranscriptRef.current + interimTranscript);
+          } else {
+            setTranscription(finalTranscriptRef.current + interimTranscript);
+          }
         };
 
         recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
-          console.error('Speech recognition error:', event.error);
+          console.error('Speech recognition error:', event.error, event.message);
           toast({
             title: "Speech Recognition Error",
             description: `Error: ${event.error}. ${event.message || 'Please try again.'}`,
@@ -103,11 +104,13 @@ const Index = () => {
         };
 
         recognitionRef.current.onend = () => {
+          console.log('Speech recognition ended');
           setIsRecording(false);
           setIsProcessing(false);
         };
 
         recognitionRef.current.onstart = () => {
+          console.log('Speech recognition started');
           setIsProcessing(false);
           toast({
             title: "Recording Started",
@@ -115,11 +118,15 @@ const Index = () => {
           });
         };
       }
+    } else {
+      console.log('Speech recognition not supported');
     }
   }, [toast]);
 
   // Start live recording
   const startRecording = async () => {
+    console.log('Start recording button clicked');
+    
     if (!isSpeechRecognitionSupported()) {
       toast({
         title: "Not Supported",
@@ -130,14 +137,20 @@ const Index = () => {
     }
 
     try {
+      console.log('Requesting microphone access...');
       // Request microphone permission
       await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('Microphone access granted');
       
       setIsRecording(true);
       setIsProcessing(true);
-      setTranscription(prev => prev + '\n--- New Recording ---\n');
+      
+      // Reset transcription
+      finalTranscriptRef.current = transcription ? transcription + '\n--- New Recording ---\n' : '--- New Recording ---\n';
+      setTranscription(finalTranscriptRef.current);
       
       if (recognitionRef.current) {
+        console.log('Starting speech recognition...');
         recognitionRef.current.start();
       }
     } catch (error) {
@@ -154,6 +167,7 @@ const Index = () => {
 
   // Stop live recording
   const stopRecording = () => {
+    console.log('Stop recording button clicked');
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
@@ -273,6 +287,7 @@ const Index = () => {
   // Clear transcription
   const clearTranscription = () => {
     setTranscription('');
+    finalTranscriptRef.current = '';
     setAudioFile(null);
     if (audioRef.current) {
       audioRef.current.pause();
