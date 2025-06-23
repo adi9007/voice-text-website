@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,6 +48,7 @@ const Index = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const finalTranscriptRef = useRef('');
+  const lastProcessedIndexRef = useRef(0);
   const { toast } = useToast();
 
   // Check if speech recognition is supported
@@ -71,25 +73,29 @@ const Index = () => {
         recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
           console.log('Speech recognition result received');
           let interimTranscript = '';
-          let finalTranscript = '';
+          let newFinalTranscript = '';
 
-          for (let i = event.resultIndex; i < event.results.length; i++) {
+          // Only process results from the last processed index onwards
+          for (let i = lastProcessedIndexRef.current; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript;
-            console.log('Transcript:', transcript, 'isFinal:', event.results[i].isFinal);
+            console.log('Processing result index:', i, 'Transcript:', transcript, 'isFinal:', event.results[i].isFinal);
             
             if (event.results[i].isFinal) {
-              finalTranscript += transcript + ' ';
+              newFinalTranscript += transcript + ' ';
+              lastProcessedIndexRef.current = i + 1;
             } else {
               interimTranscript += transcript;
             }
           }
 
-          if (finalTranscript) {
-            finalTranscriptRef.current += finalTranscript;
-            setTranscription(finalTranscriptRef.current + interimTranscript);
-          } else {
-            setTranscription(finalTranscriptRef.current + interimTranscript);
+          // Update final transcript only if we have new final results
+          if (newFinalTranscript) {
+            finalTranscriptRef.current += newFinalTranscript;
+            console.log('Updated final transcript:', finalTranscriptRef.current);
           }
+
+          // Set the display transcription (final + interim)
+          setTranscription(finalTranscriptRef.current + interimTranscript);
         };
 
         recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
@@ -112,6 +118,8 @@ const Index = () => {
         recognitionRef.current.onstart = () => {
           console.log('Speech recognition started');
           setIsProcessing(false);
+          // Reset the processed index when starting a new recording session
+          lastProcessedIndexRef.current = 0;
           toast({
             title: "Recording Started",
             description: "Speak clearly into your microphone. Transcription will appear in real-time.",
@@ -145,7 +153,8 @@ const Index = () => {
       setIsRecording(true);
       setIsProcessing(true);
       
-      // Reset transcription
+      // Reset tracking variables for new recording
+      lastProcessedIndexRef.current = 0;
       finalTranscriptRef.current = transcription ? transcription + '\n--- New Recording ---\n' : '--- New Recording ---\n';
       setTranscription(finalTranscriptRef.current);
       
@@ -288,6 +297,7 @@ const Index = () => {
   const clearTranscription = () => {
     setTranscription('');
     finalTranscriptRef.current = '';
+    lastProcessedIndexRef.current = 0;
     setAudioFile(null);
     if (audioRef.current) {
       audioRef.current.pause();
